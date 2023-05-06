@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aplicação TradingView</title>
+  <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body>
+  <div id="chart"></div>
+  <button id="export">Exportar CSV</button>
+  <script>
+    const chart = LightweightCharts.createChart(document.getElementById('chart'), { width: 600, height: 300 });
+    const lineSeries = chart.addCandlestickSeries();
+
+    const data = [
+        // Adicione os dados do gráfico aqui no formato {time: 'YYYY-MM-DD', open: O, high: H, low: L, close: C},
+    ];
+
+    lineSeries.setData(data);
+
+    document.getElementById('export').addEventListener('click', () => {
+        $.ajax({
+            url: '/export_csv',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(data),
+            success: function(response) {
+                const url = URL.createObjectURL(new Blob([response]));
+                const link = document.createElement('a');
+                link.href = url;
+                link.setAttribute('download', 'dados.csv');
+                document.body.appendChild(link);
+                link.click();
+            },
+        });
+    });
+  </script>
+</body>
+</html>
