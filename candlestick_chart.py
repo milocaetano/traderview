@@ -8,13 +8,20 @@ from dash.dependencies import Input, Output, State
 import logging
 
 ##Version working okay ( but need to be improved: vertical resize)
-
+##loading chart next and previous day
 logging.basicConfig(level=logging.DEBUG)
 
-def get_data_from_ccxt():
+current_date = datetime.now() - timedelta(days=3)
+
+def get_data_from_ccxt(target_date=None):
     exchange = ccxt.binance()
     timeframe = '5m'
-    since = exchange.parse8601(str((datetime.now() - timedelta(days=90)).date()) + 'T00:00:00Z')
+    
+    if target_date is None:
+        since = exchange.parse8601(str(current_date.date()) + 'T00:00:00Z')      
+    else:
+        since = exchange.parse8601(str((target_date - timedelta(days=2.5)).date()) + 'T00:00:00Z')
+        
     ohlcv_data = exchange.fetch_ohlcv('BTC/USDT', timeframe, since)
 
     df = pd.DataFrame(ohlcv_data, columns=['timestamp', 'Open', 'High', 'Low', 'Close', 'Volume'])
@@ -22,12 +29,21 @@ def get_data_from_ccxt():
     df.drop('timestamp', axis=1, inplace=True)
     return df
 
-def load_data():
-    df = get_data_from_ccxt()
+def load_data(target_date=None):
+    df = get_data_from_ccxt(target_date)
     df.set_index('Date', inplace=True)
     df = df.resample('5T').agg({'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last', 'Volume': 'sum'})
     df.reset_index(inplace=True)
     return df
+def create_candlestick_chart(df):
+    trace = go.Candlestick(x=df['Date'],
+                           open=df['Open'],
+                           high=df['High'],
+                           low=df['Low'],
+                           close=df['Close'])
+    layout = go.Layout(xaxis={'type': 'category'}, yaxis={'title': 'Price'})
+    return {'data': [trace], 'layout': layout}
+
 
 def create_candlestick_chart(df):
     chart = go.Figure(data=[go.Candlestick(x=df['Date'],
@@ -70,7 +86,54 @@ def create_dash_app(df):
         ),
         html.Button('Exportar CSV', id='export-button'),
         dcc.Download(id="download-csv"),
+        html.Button('1 dia atrás', id='back-button'),
+        html.Button('1 dia à frente', id='forward-button'),
+        dcc.Store(id='date-storage', data=df['Date'].min())
     ])
+    
+    @app.callback(
+        Output('candlestick-graph', 'figure'),
+        Input('back-button', 'n_clicks'),
+        Input('forward-button', 'n_clicks'),
+        prevent_initial_call=True
+    )
+    def handle_button_clicks(back_clicks, forward_clicks):
+        ctx = dash.callback_context
+        if not ctx.triggered:
+            logging.info("Nenhum botão foi clicado ainda.")
+            raise dash.exceptions.PreventUpdate
+        else:
+            button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+
+        global current_date
+        if back_clicks:
+            current_date -= timedelta(days=1)
+            new_df = get_data_from_ccxt(current_date)
+            return create_candlestick_chart(new_df)
+        elif forward_clicks:
+            current_date += timedelta(days=1)
+            new_df = get_data_from_ccxt(current_date)
+            return create_candlestick_chart(new_df)
+        else:
+            raise dash.exceptions.PreventUpdate
+
+    # def handle_button_clicks(back_clicks, forward_clicks, stored_date):
+    #     ctx = dash.callback_context
+    #     if not ctx.triggered:
+    #         raise dash.exceptions.PreventUpdate
+    #     else:
+    #         button_id = ctx.triggered[0]['prop_id'].split('.')[0']
+
+    #     # Convertendo a data armazenada para um objeto datetime
+    #     stored_date = datetime.strptime(stored_date, "%Y-%m-%d %H:%M:%S.%f")
+
+    #     if button_id == 'back-button':
+    #         logging.debug("Você clicou no botão esquerdo.")
+    #         return (stored_date - timedelta(days=1)).strftime("%Y-%m-%d %H:%M:%S.%f")
+    #     elif button_id == 'forward-button':
+    #         logging.debug("Você clicou no botão direito.")
+    #         return (stored_date + timedelta(days=1)).strftime("%Y-%m-%d %H:%M:%S.%f")
+
 
     @app.callback(
         Output("download-csv", "data"),
