@@ -7,6 +7,8 @@ from dash import dcc, html
 from dash.dependencies import Input, Output, State
 import logging
 
+##Version working okay ( but need to be improved: vertical resize)
+
 logging.basicConfig(level=logging.DEBUG)
 
 def get_data_from_ccxt():
